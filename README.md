@@ -1,7 +1,7 @@
 # Backend
 
 PokemonAPI
-  - Contains endpoints consumed by fronted to search and get list of matching pokemons and URI to details endpoint
+  - Contains endpoints consumed by [fronted](https://github.com/Sid-chudasama/Headversity-Frontend) to search and get list of matching pokemons and URI to details endpoint
   - Also has a Sqlite database that has the pokemon name and URI data
   
 Function App
