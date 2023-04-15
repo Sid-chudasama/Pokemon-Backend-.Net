@@ -1,10 +1,8 @@
-using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PokemonAPI.Models;
 using PokemonCore;
 using PokemonCore.Domain;
-using PokemonFunctionApp.Models;
 
 namespace PokemonAPI.Controllers
 {
@@ -22,6 +20,7 @@ namespace PokemonAPI.Controllers
             _pokemonDbContext = pokemonDbContext;
         }
 
+        #region Public
         [HttpGet(Name = "Search")]
         [Produces("application/json", Type = typeof(SearchResponse))]
         [ProducesResponseType(typeof(SearchResponse), (int)StatusCodes.Status200OK)]
@@ -30,7 +29,10 @@ namespace PokemonAPI.Controllers
         {
             try
             {
-                var query = _pokemonDbContext.Pokemons.AsQueryable();
+                var query = _pokemonDbContext.Pokemons
+                            .Include(p => p.PokemonDetail)
+                            .AsQueryable();
+
                 if (!string.IsNullOrEmpty(criteria.Query))
                 {
                     query = query.Where(p => p.Name.Contains(criteria.Query));
@@ -39,8 +41,9 @@ namespace PokemonAPI.Controllers
                 int skip = (criteria.Page ?? 1) - 1;
                 int pageSize = criteria.PageSize ?? 20;
 
-                var pokemons = query.OrderBy(p => p.Id)
-                                .Skip(skip * pageSize)
+                query = SortAndOrder(criteria.SortField, criteria.OrderBy, query);
+
+                var pokemons = query.Skip(skip * pageSize)
                                 .Take(pageSize)
                                 .ToListAsync();
 
@@ -94,5 +97,17 @@ namespace PokemonAPI.Controllers
                 return Problem(ex.Message);
             }
         }
+        #endregion
+
+        #region Private
+        private IQueryable<Pokemon> SortAndOrder(SortField? sortBy, OrderBy orderby, IQueryable<Pokemon> query) => sortBy switch
+        {
+            SortField.Name => orderby.Equals(OrderBy.Asc) ? query.OrderBy(p => p.Name) : query.OrderByDescending(p => p.Name),
+            SortField.Height => orderby.Equals(OrderBy.Asc) ? query.OrderBy(p => p.PokemonDetail.Height) : query.OrderByDescending(p => p.PokemonDetail.Height),
+            SortField.Weight => orderby.Equals(OrderBy.Asc) ? query.OrderBy(p => p.PokemonDetail.Weight) : query.OrderByDescending(p => p.PokemonDetail.Weight),
+            SortField.Experience => orderby.Equals(OrderBy.Asc) ? query.OrderBy(p => p.PokemonDetail.Experience) : query.OrderByDescending(p => p.PokemonDetail.Experience),
+            _ => orderby.Equals(OrderBy.Asc) ? query.OrderBy(p => p.Id) : query.OrderByDescending(p => p.Id),
+        };
+        #endregion
     }
 }

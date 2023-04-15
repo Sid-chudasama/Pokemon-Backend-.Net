@@ -7,6 +7,7 @@ namespace PokemonCore.Domain
         public long Id { get; set; }
         public string Name { get; set; }
         public string Url { get; set; }
+        public PokemonDetail PokemonDetail { get; set; }
 
         public void Update(Pokemon p)
         {

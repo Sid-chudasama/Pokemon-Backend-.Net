@@ -5,6 +5,8 @@ namespace PokemonAPI.Models
     public class Search : PagedQuery
     {
         public string? Query { get; set; }
+        public SortField? SortField { get; set; }
+        public OrderBy OrderBy { get; set; }
     }
 
     public class PagedQuery

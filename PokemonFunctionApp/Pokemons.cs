@@ -7,6 +7,7 @@ using PokemonCore;
 using PokemonFunctionApp.Models;
 using System.Collections.Generic;
 using PokemonCore.Domain;
+using Microsoft.Azure.Functions.Worker.Http;
 
 namespace PokemonFunctionApp
 {
@@ -43,7 +44,7 @@ namespace PokemonFunctionApp
 
                 //Get all records
                 var responseTask = client.GetAsync($"?offset=0&limit={initialCall?.Count}");
-                var allPokemons = await _pokemonDbContext.Pokemons.ToListAsync(); //Simultaneously load data from DB while external API call is running
+                var allPokemons = await _pokemonDbContext.Pokemons.ToListAsync();
                 var result = await responseTask;
                 if (!result?.IsSuccessStatusCode ?? true)
                 {
@@ -51,7 +52,7 @@ namespace PokemonFunctionApp
                     return;
                 }
                 var pokemonExt = await result.Content.ReadFromJsonAsync<PokemonExt>();
-
+                List<Pokemon> newPokemons = new List<Pokemon>();
 
                 //Process data
                 pokemonExt.Results.ForEach(async i =>
@@ -62,10 +63,16 @@ namespace PokemonFunctionApp
                     }
                     else
                     {
-                        await _pokemonDbContext.Pokemons.AddAsync(i);
+                        newPokemons.Add(i);
                     }
                 });
+
+                await ManageDetailsAsync(newPokemons); //Get details of new pokemons
+                await ManageDetailsAsync(allPokemons); //Update details of existing pokemons
+
+                await _pokemonDbContext.Pokemons.AddRangeAsync(newPokemons);
                 _pokemonDbContext.Pokemons.UpdateRange(allPokemons);
+
                 await _pokemonDbContext.SaveChangesAsync();
             }
             catch (Exception ex)
@@ -75,21 +82,51 @@ namespace PokemonFunctionApp
 
             _logger.LogInformation($"Next Pokemon function timer schedule at: {myTimer.ScheduleStatus.Next}");
         }
-    }
 
-    public class MyInfo
-    {
-        public MyScheduleStatus ScheduleStatus { get; set; }
+        #region Private
+        private async Task ManageDetailsAsync(List<Pokemon> pokemons)
+        {
+            int count = 1;
+            List<PokemonDetail> details = new List<PokemonDetail>();
 
-        public bool IsPastDue { get; set; }
-    }
+            foreach(var p in pokemons)
+            {
+                //Call details API for 200 pokemons simultaneously
+                List<Task> allDetailTasks = new List<Task>();
+                allDetailTasks.Add(GetDetails(p));
 
-    public class MyScheduleStatus
-    {
-        public DateTime Last { get; set; }
+                if (count % 200 == 0)
+                {
+                    await Task.WhenAll(allDetailTasks);
+                }
+                else if (count == pokemons.Count)
+                {
+                    await Task.WhenAll(allDetailTasks);
+                }
+                count++;
+            }
+        }
 
-        public DateTime Next { get; set; }
+        private async Task GetDetails(Pokemon pokemon)
+        {
+            HttpClient client = new HttpClient();
+            client.BaseAddress = new Uri(pokemon.Url);
+            var response = await client.GetAsync("");
 
-        public DateTime LastUpdated { get; set; }
+            if (!response?.IsSuccessStatusCode ?? true)
+            {
+                _logger.LogError($"Get pokemon detail failed with status : {response?.StatusCode}");
+                return;
+            }
+            var result = await response.Content.ReadFromJsonAsync<PokemonDetailExt>();
+
+            pokemon.PokemonDetail = new PokemonDetail
+            {
+                Experience = result.Base_experience ?? 0,
+                Height = result.Height,
+                Weight = result.Weight
+            };
+        }
+        #endregion
     }
 }
