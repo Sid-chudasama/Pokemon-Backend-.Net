@@ -14,3 +14,4 @@ Function App
 PokemonCore
   - This project contains Dbcontext and Entities to setup and query Sqlite Database
   - Database is setup using code first migration
+Note : Make sure to update the path to DB in appsettings, if the db file has been moved.
